@@ -112,7 +112,7 @@ bash eval.sh
 ```
 
 And thanks to the authors of [Deformable 3D Gaussians](https://github.com/ingra14m/Deformable-3D-Gaussians) and [
-GaussianShader](https://github.com/Asparagus15/GaussianShader) for their excellent code, please consider also cite this repository:
+GaussianShader](https://github.com/Asparagus15/GaussianShader) for their excellent code, please consider also cite their repository:
 
 ```
 @article{yang2023deformable3dgs,
