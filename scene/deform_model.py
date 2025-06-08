@@ -1,0 +1,93 @@
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
+from utils.time_utils import DeformNetwork, DeformEnvNetwork
+import os
+from utils.system_utils import searchForMaxIteration
+from utils.general_utils import get_expon_lr_func
+
+
+class DeformModel:
+    def __init__(self):
+        self.deform = DeformNetwork().cuda()
+        self.optimizer = None
+        self.spatial_lr_scale = 5
+
+    def step(self, xyz, time_emb):
+        return self.deform(xyz, time_emb)
+
+    def train_setting(self, training_args):
+        l = [
+            {'params': list(self.deform.parameters()),
+             'lr': training_args.position_lr_init * self.spatial_lr_scale,
+             "name": "deform"}
+        ]
+        self.optimizer = torch.optim.Adam(l, lr=0.0, eps=1e-15)
+
+        self.deform_scheduler_args = get_expon_lr_func(lr_init=training_args.deform_lr_init * self.spatial_lr_scale,
+                                                       lr_final=training_args.deform_lr_final ,
+                                                       lr_delay_mult=training_args.deform_lr_delay_mult,
+                                                       max_steps=training_args.deform_lr_max_steps)
+
+    def save_weights(self, model_path, iteration):
+        out_weights_path = os.path.join(model_path, "deform/iteration_{}".format(iteration))
+        os.makedirs(out_weights_path, exist_ok=True)
+        torch.save(self.deform.state_dict(), os.path.join(out_weights_path, 'deform.pth'))
+
+    def load_weights(self, model_path, iteration=-1):
+        if iteration == -1:
+            loaded_iter = searchForMaxIteration(os.path.join(model_path, "deform"))
+        else:
+            loaded_iter = iteration
+        weights_path = os.path.join(model_path, "deform/iteration_{}/deform.pth".format(loaded_iter))
+        self.deform.load_state_dict(torch.load(weights_path))
+
+    def update_learning_rate(self, iteration):
+        for param_group in self.optimizer.param_groups:
+            if param_group["name"] == "deform":
+                lr = self.deform_scheduler_args(iteration)
+                param_group['lr'] = lr
+                return lr
+            
+class DeformEnvModel:
+    def __init__(self, t_multires):
+        self.deform = DeformEnvNetwork(t_multires=t_multires).cuda()
+        self.optimizer = None
+        self.spatial_lr_scale = 5
+
+    
+    def step(self, xyz, time_emb):
+        return self.deform(xyz, time_emb)
+
+    def train_setting(self, training_args):
+        l = [
+            {'params': list(self.deform.parameters()),
+             'lr': training_args.brdf_mlp_lr_init,
+             "name": "deform_Env"}
+        ]
+        self.optimizer = torch.optim.Adam(l, lr=0.0, eps=1e-15)
+
+        self.deform_scheduler_args = get_expon_lr_func(lr_init=training_args.brdf_mlp_lr_init,
+                                                       lr_final=training_args.brdf_mlp_lr_final,
+                                                       lr_delay_mult=training_args.brdf_mlp_lr_delay_mult,
+                                                       max_steps=training_args.brdf_mlp_lr_max_steps)
+
+    def save_weights(self, model_path, iteration):
+        out_weights_path = os.path.join(model_path, "deform_Env/iteration_{}".format(iteration))
+        os.makedirs(out_weights_path, exist_ok=True)
+        torch.save(self.deform.state_dict(), os.path.join(out_weights_path, 'deform_Env.pth'))
+
+    def load_weights(self, model_path, iteration=-1):
+        if iteration == -1:
+            loaded_iter = searchForMaxIteration(os.path.join(model_path, "deform_Env"))
+        else:
+            loaded_iter = iteration
+        weights_path = os.path.join(model_path, "deform_Env/iteration_{}/deform_Env.pth".format(loaded_iter))
+        self.deform.load_state_dict(torch.load(weights_path))
+
+    def update_learning_rate(self, iteration):
+        for param_group in self.optimizer.param_groups:
+            if param_group["name"] == "deform_Env":
+                lr = self.deform_scheduler_args(iteration)
+                param_group['lr'] = lr
+                return lr
